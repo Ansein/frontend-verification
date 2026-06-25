@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Verification"
+  short_description: "Detect setup and verify frontend changes in a browser."
+  default_prompt: "Use $frontend-verification to verify this frontend or full-stack change before marking it complete."
