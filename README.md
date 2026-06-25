@@ -1,8 +1,12 @@
 # Frontend Verification Skill
 
-`frontend-verification` is a Codex Skill that makes frontend and full-stack work finish with a browser verification loop, not just a passing build.
+`frontend-verification` is a portable frontend verification protocol packaged as a Codex Skill. It helps Codex, Claude Code, OpenCode, and other coding agents finish frontend and full-stack work with a browser verification loop, not just a passing build.
 
 It is designed for projects where a coding agent changes UI, routing, styling, forms, API integrations, loading states, error states, or backend behavior that is visible in the frontend.
+
+## Multimodal Requirement
+
+For true visual review, the executing agent or reviewer LLM should have multimodal capability so it can inspect screenshots and visible UI states. Text-only agents can still run commands, collect logs, and report missing evidence, but they cannot reliably judge layout, blank screens, clipping, overlap, or visual regressions from screenshots.
 
 ## What It Does
 
