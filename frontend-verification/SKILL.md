@@ -11,6 +11,8 @@ Verify the changed frontend path in a real browser before claiming the task is c
 
 This enhanced version includes a read-only setup detector at `scripts/detect_frontend_setup.mjs`. Use it to discover the target project's package manager, verification scripts, Playwright setup, and missing prerequisites before deciding which checks to run.
 
+It also includes `scripts/inspect_page.mjs`, a Playwright-based page inspection helper. Use it when Playwright is installed in the target project and browser MCP tools are unavailable or unnecessary.
+
 ## Reviewer Subagent Mode
 
 Prefer separating implementation from verification when subagents are available.
@@ -49,7 +51,44 @@ Before running checks, determine:
 
 If the user did not name a route, infer the most relevant page from the files changed, router config, tests, and nearby code.
 
-### 2. Detect Project Verification Setup
+### 2. Plan Observation Targets
+
+Create a short observation checklist before running browser verification. Derive it from the user request, changed files, routes, component names, tests, and API calls.
+
+Include the relevant items from this set:
+
+- Primary route or page to open.
+- Primary user flow to exercise.
+- Changed component or UI region to inspect.
+- Data/API path visible in the UI.
+- Initial, loading, success, empty, and error states when relevant.
+- Auth, permission, or role-specific states when relevant.
+- Desktop and mobile viewport checks when layout or responsive behavior changed.
+- Screenshots that should be captured.
+- Existing E2E or smoke tests that should cover the change.
+
+Do not ask the user for observation targets when the affected route and user flow are obvious from the task or diff. State the inferred checklist and proceed.
+
+Ask the user a concise clarification, or present a short checklist for selection, when:
+
+- The changed files affect multiple unrelated routes.
+- The task changes shared components used across many pages.
+- The route, role, tenant, dataset, or browser state cannot be inferred.
+- The verification could perform destructive actions or depend on external services.
+- The visual acceptance criteria are subjective and screenshots alone are not enough.
+
+When asking, propose concrete options rather than an open-ended question. Example:
+
+```text
+I see this change may affect three browser paths. Which should I verify first?
+1. Dashboard summary cards at /dashboard
+2. Project creation form at /projects/new
+3. Empty/error state in the project list
+```
+
+If the user is unavailable or the workflow should continue without waiting, choose the highest-risk paths, state the assumptions in the report, and mark unverified targets as remaining risks.
+
+### 3. Detect Project Verification Setup
 
 Run the bundled detector from this skill directory before choosing commands:
 
@@ -74,7 +113,7 @@ Use the detector output to decide:
 
 The detector is read-only. It must not be treated as verification by itself.
 
-### 3. Run Project Checks
+### 4. Run Project Checks
 
 Prefer the project's unified verification command when present:
 
@@ -95,7 +134,7 @@ npx playwright test
 
 Skip missing scripts without inventing commands. Record what was available and what was not.
 
-### 4. Handle Missing Verification Setup
+### 5. Handle Missing Verification Setup
 
 Do not assume Playwright, browser MCP tools, or `agent:verify` are already installed.
 
@@ -119,7 +158,7 @@ one smoke test for the changed or core route
 AGENTS.md rule that invokes this skill
 ```
 
-### 5. Bootstrap Verification When In Scope
+### 6. Bootstrap Verification When In Scope
 
 When the user asks to set up or upgrade frontend verification, add the smallest useful project-level setup:
 
@@ -131,7 +170,7 @@ When the user asks to set up or upgrade frontend verification, add the smallest 
 
 Do not add visual regression snapshots in the first setup unless the user explicitly asks for visual regression. Screenshots during browser inspection are enough for the enhanced version.
 
-### 6. Start the App
+### 7. Start the App
 
 Use existing project scripts first:
 
@@ -143,17 +182,28 @@ npm run start
 
 Use backend startup commands only when the affected frontend path requires live backend behavior. Wait until the app is reachable before browser inspection.
 
-### 7. Inspect in a Browser
+### 8. Inspect in a Browser
 
 Use the best available browser path:
 
 1. Use Chrome DevTools MCP when available for live browser inspection, console, network, screenshots, and performance clues.
 2. Use Playwright MCP when available for structured page interaction.
-3. Use Playwright CLI/tests when MCP browser tools are unavailable.
+3. Use `scripts/inspect_page.mjs` for a focused page load, console/pageerror/network check, and screenshot when Playwright is installed in the target project.
+4. Use Playwright CLI/tests when MCP browser tools are unavailable.
 
 Do not claim that Chrome DevTools MCP or Playwright MCP was used unless that tool is actually available in the active agent environment. If no browser MCP exists, use Playwright CLI or report the missing browser inspection capability.
 
-Open the affected route and exercise the changed user path. Check at minimum:
+Example page inspection command:
+
+```bash
+node <skill-dir>/scripts/inspect_page.mjs --project <project-root> --url http://127.0.0.1:5173 --screenshot artifacts/frontend-verification/page.png --json
+```
+
+The helper is not a replacement for active interaction. It loads one URL, watches console/page errors and network failures, and captures a screenshot. Use MCP tools or project Playwright tests for clicks, forms, hover states, dialogs, tabs, and other multi-step flows.
+
+Open the affected route and actively exercise the changed user path. Do not only load the page. Click, type, hover, select, submit, scroll, open dialogs/menus, change tabs, and trigger validation states when those interactions are relevant to the change.
+
+Check at minimum:
 
 - The page is not blank and does not crash.
 - The expected UI appears.
@@ -166,13 +216,25 @@ Open the affected route and exercise the changed user path. Check at minimum:
 
 Capture at least one screenshot when the task changes visible UI. Capture multiple screenshots when the change affects important states.
 
-### 8. Add or Update E2E Coverage
+### 9. Detect Small Visual or Interaction Changes
+
+Use layered evidence for small frontend changes:
+
+- For behavior changes, prefer deterministic assertions: visible text, enabled/disabled state, selected tab, URL change, form value, toast/dialog presence, request outcome, or DOM attribute.
+- For tiny visual changes, capture before/after or state-specific screenshots when possible and inspect them with a multimodal reviewer.
+- For precise pixel-level regression, use Playwright visual comparisons such as `toHaveScreenshot()` only when the project already has visual snapshots or when the user asks to add visual regression.
+- For layout-sensitive changes, check the relevant component at desktop and mobile viewports, and inspect bounding boxes, overflow, clipping, overlap, and scroll behavior.
+- For animation, hover, focus, dropdown, tooltip, modal, popover, drag/drop, or keyboard behavior, actively trigger the state before judging it.
+
+Do not overclaim micro-visual correctness from logs alone. If no multimodal model, baseline screenshot, or visual regression test is available, report the limitation under `Remaining risks`.
+
+### 10. Add or Update E2E Coverage
 
 If Playwright tests already exist, run the relevant tests. If the change adds or changes an important user-facing behavior, add or update a focused Playwright test for that path unless the user explicitly asks not to change tests.
 
 For small cosmetic-only changes, a browser screenshot plus static checks may be enough.
 
-### 9. Decide Completion
+### 11. Decide Completion
 
 Treat the task as incomplete if any of these occur:
 
@@ -195,6 +257,7 @@ End with a concise verification report:
 Frontend verification report
 
 Changed route/path:
+Observation targets:
 Setup detected:
 Reviewer mode:
 User flow checked:

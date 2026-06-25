@@ -27,6 +27,7 @@
 ## 当前能力
 
 - 探测目标项目已有的前端验收配置。
+- 在浏览器验收前规划具体的前端观测对象。
 - 判断 package manager、可用 scripts、Playwright 配置和 E2E 目录。
 - 优先使用目标项目已有的 `agent:verify` 命令。
 - 在没有统一命令时，运行最接近的 typecheck、lint、build、test、Playwright 检查。
@@ -46,6 +47,7 @@ frontend-verification/
     openai.yaml
   scripts/
     detect_frontend_setup.mjs
+    inspect_page.mjs
 
 README.md
 README_zh.md
@@ -78,6 +80,14 @@ node frontend-verification/scripts/detect_frontend_setup.mjs --project . --json
 - 是否存在 E2E 测试目录
 - 缺少哪些前端验收前置条件
 
+当目标应用已经启动，并且目标项目已经安装 Playwright 时，可以运行页面观测脚本：
+
+```bash
+node frontend-verification/scripts/inspect_page.mjs --project <project-root> --url http://127.0.0.1:5173 --screenshot artifacts/frontend-verification/page.png --json
+```
+
+`inspect_page.mjs` 会打开一个 URL，记录 console error、page error、失败的网络请求、HTTP 4xx/5xx，并可保存截图。它不会自动点击多步骤流程；涉及点击、表单、hover、弹窗、tab 等交互时，仍应使用浏览器 MCP 工具或项目里的 Playwright 测试。
+
 ## 推荐的 AGENTS.md 规则
 
 在目标项目的 `AGENTS.md` 里写：
@@ -96,6 +106,16 @@ Do not mark the task complete until the changed user path has been verified in a
 只有在变更过的用户路径已经通过浏览器实际验收，并且可用时 `npm run agent:verify` 通过后，任务才算完成。
 ```
 
+这样写之后，对遵守 `AGENTS.md` 的 agent 来说，这个协议会在前端或全栈用户路径变更时默认启用。它不应该用于纯后端、纯文档、纯数据或纯工具链修改，除非这些修改会影响前端用户路径。
+
+如果不想继续使用，删除或注释掉这段规则即可。如果只想在明确要求时使用，可以改成更弱的 opt-in 规则：
+
+```text
+Use the `frontend-verification` skill only when the user explicitly asks for browser verification, QA review, or frontend acceptance testing.
+```
+
+单次任务也可以在 prompt 里覆盖，例如：“这次是纯文档修改，跳过 frontend-verification。”
+
 ## 目标项目的理想配置
 
 推荐目标项目逐步具备：
@@ -113,15 +133,17 @@ AGENTS.md 里有触发本 Skill 的规则
 ## 验收流程
 
 1. 识别受影响的路由、组件、用户动作和预期状态。
-2. 对目标项目运行 `scripts/detect_frontend_setup.mjs`。
-3. 如果存在 `agent:verify`，优先运行它。
-4. 如果没有统一命令，运行最接近的 typecheck、lint、build、test、Playwright 检查。
-5. 用项目已有的 `dev`、`dev:all`、`start`、`preview` 等脚本启动应用。
-6. 在浏览器中打开受影响路径。
-7. 实际执行变更过的用户路径。
-8. 对可见 UI 修改保存截图。
-9. 对重要用户行为新增或更新聚焦的 E2E 测试。
-10. 输出 `PASS` 或 `FAIL` 报告。
+2. 规划观测对象：路由、用户路径、组件区域、UI 状态、视口、截图和相关 E2E 测试。
+3. 如果无法安全推断受影响的浏览器路径，就让用户选择检查重点；如果可以推断，就列出检查清单并继续。
+4. 对目标项目运行 `scripts/detect_frontend_setup.mjs`。
+5. 如果存在 `agent:verify`，优先运行它。
+6. 如果没有统一命令，运行最接近的 typecheck、lint、build、test、Playwright 检查。
+7. 用项目已有的 `dev`、`dev:all`、`start`、`preview` 等脚本启动应用。
+8. 在浏览器中打开受影响路径。
+9. 实际执行变更过的用户路径。
+10. 对可见 UI 修改保存截图。
+11. 对重要用户行为新增或更新聚焦的 E2E 测试。
+12. 输出 `PASS` 或 `FAIL` 报告。
 
 ## Builder / Reviewer Subagent 工作流
 
@@ -167,6 +189,7 @@ Do not modify source files. Run the available verification checks, inspect the a
 Frontend verification report
 
 Changed route/path:
+Observation targets:
 Setup detected:
 Reviewer mode:
 User flow checked:
@@ -194,4 +217,5 @@ python C:/Users/16928/.codex/skills/.system/skill-creator/scripts/quick_validate
 
 ```bash
 node --check frontend-verification/scripts/detect_frontend_setup.mjs
+node --check frontend-verification/scripts/inspect_page.mjs
 ```
